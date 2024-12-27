@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  meds_db:
+    image: postgres:15
+    container_name: meds_db
+    environment:
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  meds_backend:
+    image: python:3.11-slim
+    container_name: meds_backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    # command: ["python", "manage.py", "runserver", "0.0.0.0:8000"]  # from dev
+    command: ["python", "-m", "gunicorn", "--bind", "0.0.0.0:8000", "--access-logfile", "/app/logs/gunicorn-access.log", "--error-logfile", "/app/logs/gunicorn-error.log", "pyramids_medicine.wsgi:application"]  # from prod
+    depends_on:
+      - meds_db
+
+  meds_frontend:
+    image: node:20
+    container_name: meds_frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    working_dir: /app
+    build:
+      context: ./frontend
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "3000:3000"
+    # command: ["npm", "start"]  # from dev
+    command: ["serve", "-s", "build"]  # from prod
+
+  meds_nginx:  # can be disabled on local envrioment
+    image: nginx:1.25
+    container_name: meds_nginx
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+    ports:
+      - "80:80"
+    depends_on:
+      - meds_frontend
+      - meds_backend
+
+volumes:
+  postgres_data:
